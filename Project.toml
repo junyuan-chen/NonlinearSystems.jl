@@ -1,0 +1,25 @@
+name = "NonlinearSystems"
+uuid = "deb0877a-d74a-4aeb-b6ac-c17f6fb4122e"
+authors = ["Junyuan Chen <norman.chen.git@gmail.com>"]
+version = "0.1.0"
+
+[deps]
+CommonSolve = "38540f10-b2f7-11e9-35d8-d573e4eb0ff2"
+FastLapackInterface = "29a986be-02c6-4525-aec4-84b980013641"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+NLSolversBase = "d41bc354-129a-5804-8e4c-c37616107c6c"
+PositiveFactorizations = "85a6dd25-e78a-55b7-8502-1745935b8125"
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+
+[compat]
+CommonSolve = "0.2"
+FastLapackInterface = "1.2"
+NLSolversBase = "7.6"
+PositiveFactorizations = "0.2.4"
+julia = "1.6"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]

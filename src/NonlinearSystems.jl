@@ -1,0 +1,36 @@
+module NonlinearSystems
+
+using Base: StridedMatrix, StridedVector, Fix1, permute!!
+using CommonSolve: solve
+using FastLapackInterface: LUWs
+using LinearAlgebra: BLAS, LAPACK, LU, Cholesky, cholesky!, Hermitian, ldiv!, mul!
+using NLSolversBase: OnceDifferentiable, value_jacobian!!, jacobian!!
+using PositiveFactorizations
+using Printf
+
+import Base: iterate, size, show
+import CommonSolve: init, solve!
+
+# Reexport
+export init, solve!, solve
+export OnceDifferentiable
+
+export ProblemType,
+       RootFinding,
+       LeastSquares,
+       AbstractAlgorithm,
+       AbstractSolver,
+       NonlinearSystem,
+
+       DenseLUSolver,
+       DenseCholeskySolver,
+
+       Hybrid,
+       HybridSolver
+
+include("utils.jl")
+include("interface.jl")
+include("linsolve.jl")
+include("hybrid.jl")
+
+end # module NonlinearSystems
