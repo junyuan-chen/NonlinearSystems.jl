@@ -12,9 +12,9 @@ abstract type AbstractSolver{T<:Number} end
 
 getsolverstate(s::AbstractSolver) = getfield(s, :state)[]
 getiter(s::AbstractSolver) = getfield(getsolverstate(s), :iter)
-getgrad(s::AbstractSolver) = getfield(s, :grad)
 getfnorm(s::AbstractSolver) = getfield(getsolverstate(s), :fnorm)
 getpnorm(s::AbstractSolver) = getfield(getsolverstate(s), :pnorm)
+getgrad(s::AbstractSolver) = getfield(s, :grad)
 getlinsolver(s::AbstractSolver) = getfield(s, :linsolver)
 
 @enum SolverIterationState::Int8 begin

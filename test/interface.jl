@@ -8,6 +8,7 @@
     @test sprint(show, p)[1:46] == "2×2 NonlinearSystem{RootFinding}(Hybrid, 3.11"
     solve!(p)
     @test Symbol(getexitstate(p)) === :ftol_reached
+    @test Symbol(getiterstate(p)) === :normal
     @test getlinsolver(p.solver) isa DenseLUSolver
     # Type parameters for LU are changed
     if VERSION > v"1.8.0-DEV"

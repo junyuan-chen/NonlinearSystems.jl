@@ -36,5 +36,6 @@ include("utils.jl")
 include("interface.jl")
 include("linsolve.jl")
 include("hybrid.jl")
+include("precompile.jl")
 
 end # module NonlinearSystems
