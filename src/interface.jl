@@ -1,4 +1,5 @@
 abstract type ProblemType end
+
 struct RootFinding <: ProblemType end
 struct LeastSquares <: ProblemType end
 
@@ -9,11 +10,19 @@ abstract type AbstractAlgorithm{T<:ProblemType} end
 
 abstract type AbstractSolver{T<:Number} end
 
-getiter(s::AbstractSolver) = getfield(s, :iter)
+getsolverstate(s::AbstractSolver) = getfield(s, :state)[]
+getiter(s::AbstractSolver) = getfield(getsolverstate(s), :iter)
 getgrad(s::AbstractSolver) = getfield(s, :grad)
-getfnorm(s::AbstractSolver) = getfield(s, :fnorm)
-getpnorm(s::AbstractSolver) = getfield(s, :pnorm)
+getfnorm(s::AbstractSolver) = getfield(getsolverstate(s), :fnorm)
+getpnorm(s::AbstractSolver) = getfield(getsolverstate(s), :pnorm)
 getlinsolver(s::AbstractSolver) = getfield(s, :linsolver)
+
+@enum SolverIterationState::Int8 begin
+    normal
+    eval_noprogress
+    jac_noprogress
+    maxntrial_reached
+end
 
 @enum SolverExitState::Int8 begin
     ftol_reached
@@ -25,14 +34,7 @@ getlinsolver(s::AbstractSolver) = getfield(s, :linsolver)
     failed
 end
 
-@enum SolverIterationState::Int8 begin
-    normal
-    eval_noprogress
-    jac_noprogress
-    maxntrial_reached
-end
-
-mutable struct NonlinearSystem{P<:ProblemType, V, M, S<:AbstractSolver}
+struct NonlinearSystem{P<:ProblemType, V, M, S<:AbstractSolver}
     fdf::OnceDifferentiable{V, M, V}
     x::V
     fx::V
@@ -43,11 +45,33 @@ mutable struct NonlinearSystem{P<:ProblemType, V, M, S<:AbstractSolver}
     gtol::Float64
     xtol::Float64
     xtolr::Float64
-    iterstate::SolverIterationState
-    exitstate::SolverExitState
+    state::RefValue{Tuple{SolverIterationState, SolverExitState}}
     showtrace::Int
 end
 
+"""
+    NonlinearSystem(::Type{P}, fdf::OnceDifferentiable, x, fx, dx, solver; kwargs...)
+
+Construct a `NonlinearSystem` for holding all information
+used for solving a nonlinear system of equations with problem type `P`.
+Users are not expected to use this method directly
+but should instead call `init` or `solve` to generate the problem.
+Any keyword argument passed to `init` or `solve` that is not accepted by
+a specific solution algorithm is passed to the constructor of `NonlinearSystem`.
+For the relevant solution algorithms, see [`Hybrid`](@ref).
+
+# Keywords
+- `maxiter::Integer=1000`: maximum number of iteration allowed before terminating.
+- `ftol::Real=1e-8`: absolute tolerance for the infinity norm of residuals `fx`.
+- `gtol::Real=1e-10`: absolute tolerance for the infinity norm of gradient vector;
+  only relevant for solving least squares.
+- `xtol::Real=0.0`: absolute tolerance for the infinity norm of a step `dx`.
+- `xtolr::Real=0.0`: relative tolerance for the infinity norm of a step `dx`
+  as a proportion of `x`.
+- `showtrace::Union{Bool,Integer}=false`: print summary information for each trial
+  made by the solver; with `showtrace=true`, information is printed
+  once every 20 iterations; an interger value specifies the gap for printing.
+"""
 function NonlinearSystem(::Type{P}, fdf::OnceDifferentiable{V,M,V}, x::AbstractVector,
         fx::AbstractVector, dx::AbstractVector, solver::AbstractSolver;
         maxiter::Integer=1000, ftol::Real=1e-8, gtol::Real=1e-10,
@@ -56,7 +80,8 @@ function NonlinearSystem(::Type{P}, fdf::OnceDifferentiable{V,M,V}, x::AbstractV
     showtrace === false && (showtrace = 0)
     return NonlinearSystem{P, V, M, typeof(solver)}(fdf, x, fx, dx, solver,
         convert(Int, maxiter), convert(Float64, ftol), convert(Float64, gtol),
-        convert(Float64, xtol), convert(Float64, xtolr), normal, inprogress, showtrace)
+        convert(Float64, xtol), convert(Float64, xtolr),
+        Ref((normal, inprogress)), showtrace)
 end
 
 nvar(s::NonlinearSystem) = length(s.fdf.x_f)
@@ -64,6 +89,10 @@ nequ(s::NonlinearSystem) = length(s.fdf.F)
 size(s::NonlinearSystem) = (nvar(s), nequ(s))
 size(s::NonlinearSystem, dim::Integer) =
     dim == 1 ? nequ(s) : dim == 2 ? nvar(s) : throw(ArgumentError("dim can only be 1 or 2"))
+
+@inline getiter(s::NonlinearSystem) = getiter(s.solver)
+@inline getiterstate(s::NonlinearSystem) = s.state[][1]
+@inline getexitstate(s::NonlinearSystem) = s.state[][2]
 
 @inline _test_ftol_i(s::NonlinearSystem, i::Int) =
     @inbounds(abs(s.fx[i]) < s.ftol)
@@ -74,10 +103,10 @@ size(s::NonlinearSystem, dim::Integer) =
 @inline _test_xtol_i(s::NonlinearSystem, i::Int) =
     @inbounds(abs(s.dx[i]) < s.xtol + s.xtolr * abs(s.x[i]))
 
-function assess_state(s::NonlinearSystem{P}) where P
-    if s.iterstate !== normal
+function assess_state(s::NonlinearSystem{P}, iterstate::SolverIterationState) where P
+    if iterstate !== normal
         return failed
-    elseif s.solver.iter >= s.maxiter
+    elseif getiter(s) >= s.maxiter
         return maxiter_reached
     elseif s.ftol > 0 && all(Fix1(_test_ftol_i, s), eachindex(s.fx))
         return ftol_reached
@@ -90,20 +119,21 @@ function assess_state(s::NonlinearSystem{P}) where P
     end
 end
 
-@inline function iterate(s::NonlinearSystem, state=getiter(s))
-    solver = s.solver
-    s.iterstate = solver(s.fdf, s.x, s.fx, s.dx)
-    s.exitstate = assess_state(s)
+@inline function iterate(s::NonlinearSystem, state=(1, normal, inprogress))
     # How iter changes depends on the specific algorithm
-    return s, getiter(solver) # Termination is never enforced here
+    iter, iterstate = s.solver(s.fdf, s.x, s.fx, s.dx)
+    exitstate = assess_state(s, iterstate)
+    s.state[] = (iterstate, exitstate)
+    return s, (iter, iterstate, exitstate) # Termination is never enforced here
 end
 
 function solve!(s::NonlinearSystem)
-    iter = getiter(s.solver)
-    while s.exitstate === inprogress
+    iter = 1
+    iterst, exitst = s.state[]
+    while exitst === inprogress
         s.showtrace > 0 && iszero((iter-1) % s.showtrace) &&
             _show_trace(stdout, s.solver, true)
-        _, iter = iterate(s, iter)
+        s, (iter, iterst, exitst) = iterate(s, (iter, iterst, exitst))
     end
     s.showtrace > 0 && !(iszero((iter-1) % s.showtrace)) &&
         _show_trace(stdout, s.solver, true)
@@ -122,7 +152,7 @@ init(Algo::Type{<:AbstractAlgorithm}, f::Function, j::Function, x0::AbstractVect
 
 function show(io::IO, s::NonlinearSystem{P}) where P
     print(io, nequ(s), '×', nvar(s), ' ', typeof(s).name.name, '{', P, "}(")
-    print(io, algorithmtype(s.solver), ", ", getfnorm(s.solver), ", ", s.exitstate, ')')
+    print(io, algorithmtype(s.solver), ", ", getfnorm(s.solver), ", ", getexitstate(s), ')')
 end
 
 function show(io::IO, ::MIME"text/plain", s::NonlinearSystem{P}) where P
@@ -134,8 +164,8 @@ function show(io::IO, ::MIME"text/plain", s::NonlinearSystem{P}) where P
     println(io, rpad("  ‖f(x)‖₂: ", w), getfnorm(s.solver))
     P === LeastSquares && println(io, rpad("  ‖∇f(x)‖₂: ", w), enorm(getgrad(s.solver)))
     println(io, rpad("  ‖Ddx‖₂: ", w), getpnorm(s.solver))
-    println(io, rpad("  Solver exit state: ", w), s.exitstate)
-    println(io, rpad("  # Iterations: ", w), getiter(s.solver))
-    println(io, rpad("  # Residual calls (f): ", w), s.fdf.f_calls[1])
-    print(io, rpad("  # Jacobian calls (df/dx): ", w), s.fdf.df_calls[1])
+    println(io, rpad("  Solver exit state: ", w), getexitstate(s))
+    println(io, rpad("  Iterations: ", w), getiter(s.solver))
+    println(io, rpad("  Residual calls (f): ", w), s.fdf.f_calls[1])
+    print(io, rpad("  Jacobian calls (df/dx): ", w), s.fdf.df_calls[1])
 end

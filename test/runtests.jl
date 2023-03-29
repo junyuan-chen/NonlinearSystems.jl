@@ -2,7 +2,7 @@ using Test
 using NonlinearSystems
 
 using LinearAlgebra
-using NonlinearSystems: luupdate!, default_linsolvertype, getlinsolver, getiter
+using NonlinearSystems: luupdate!, default_linsolver, getlinsolver, getiter
 
 const tests = [
     "linsolve",

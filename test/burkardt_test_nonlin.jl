@@ -474,7 +474,7 @@ for (k, (name, algo)) in enumerate(algos)
         end
         # Two problems cannot be solved by other popular trust region solvers either
         if p ∈ (6, 21)
-            @test Symbol(s.exitstate) == :failed
+            @test Symbol(getexitstate(s)) == :failed
         else
             @test errors[p,k] === nothing
             @test residnorms[p,k] < 1e-10

@@ -1,3 +1,18 @@
+function f!(F, x)
+    F[1] = (x[1] + 3) * (x[2]^3 - 7) + 18
+    F[2] = sin(x[2] * exp(x[1]) - 1)
+    return F
+end
+
+function j!(J, x)
+    J[1,1] = x[2]^3 - 7
+    J[1,2] = 3 * x[2]^2 * (x[1] + 3)
+    u = exp(x[1]) * cos(x[2] * exp(x[1]) - 1)
+    J[2,1] = x[2] * u
+    J[2,2] = u
+    return J
+end
+
 @testset "luupdate!" begin
     for N in (1, 20)
         A = rand(N, N)
@@ -14,19 +29,18 @@
 end
 
 @testset "DenseLUSolver" begin
-    M, N = 5, 5
-    J = rand(M, N)
-    f = rand(M)
-    s = init(default_linsolvertype(J, f, RootFinding), J, f)
-    Y = zeros(N)
-    @test solve!(s, Y, J, f) ≈ lu(J) \ f
+    x0 = zeros(2)
+    fdf = OnceDifferentiable(f!, j!, x0, similar(x0))
+    s = default_linsolver(fdf, x0, RootFinding)
+    Y = zeros(2)
+    @test solve!(s, Y, copy(fdf.DF), copy(fdf.F)) ≈ fdf.DF \ fdf.F
 end
 
 @testset "DenseCholeskySolver" begin
-    M, N = 5, 3
-    J = rand(M, N)
-    f = rand(M)
-    s = init(default_linsolvertype(J, f, LeastSquares), J, f)
-    Y = zeros(N)
-    @test solve!(s, Y, J, f) ≈ cholesky(J'J) \ J'f
+    x0 = zeros(2)
+    fdf = OnceDifferentiable(f!, j!, x0, similar(x0))
+    s = default_linsolver(fdf, x0, LeastSquares)
+    Y = zeros(2)
+    J = fdf.DF
+    @test solve!(s, Y, copy(J), copy(fdf.F)) ≈ cholesky(J'J) \ J'fdf.F
 end

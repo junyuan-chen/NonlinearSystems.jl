@@ -540,7 +540,7 @@ for (k, (name, algo)) in enumerate(algos)
         # Root-finding problems with LU all succeed
         # Some problems are not solved with Cholesky least squares
         if p ∈ (7, 13, 14) && name == :Hybrid_ls
-            @test Symbol(s.exitstate) ∈ (:failed, :maxiter_reached)
+            @test Symbol(getexitstate(s)) ∈ (:failed, :maxiter_reached)
         else
             @test errors[p,k] === nothing
             @test residnorms[p,k] < 1e-10

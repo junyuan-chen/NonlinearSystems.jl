@@ -1,6 +1,6 @@
 module NonlinearSystems
 
-using Base: StridedMatrix, StridedVector, Fix1, permute!!
+using Base: StridedMatrix, StridedVector, RefValue, Fix1, permute!!
 using CommonSolve: solve
 using FastLapackInterface: LUWs
 using LinearAlgebra: BLAS, LAPACK, LU, Cholesky, cholesky!, Hermitian, ldiv!, mul!
@@ -20,7 +20,11 @@ export ProblemType,
        LeastSquares,
        AbstractAlgorithm,
        AbstractSolver,
+       getsolverstate,
+       getiter,
        NonlinearSystem,
+       getiterstate,
+       getexitstate,
 
        DenseLUSolver,
        DenseCholeskySolver,

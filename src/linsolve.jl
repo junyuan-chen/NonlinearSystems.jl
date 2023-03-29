@@ -38,8 +38,11 @@ mutable struct DenseLUSolver{F}
     perm::Vector{Int}
 end
 
-default_linsolvertype(::StridedMatrix, ::StridedVector, ::Type{RootFinding}) =
-    DenseLUSolver
+function default_linsolver(fdf::OnceDifferentiable{V, M, V}, x0::V,
+        ::Type{RootFinding}) where {V<:StridedVector, M<:StridedMatrix}
+    value_jacobian!!(fdf, x0)
+    return init(DenseLUSolver, fdf.DF, fdf.F)
+end
 
 function init(::Type{DenseLUSolver}, J::StridedMatrix, f::StridedVector)
     ws = LUWs(J)
@@ -82,8 +85,11 @@ mutable struct DenseCholeskySolver{TF, TI, M, V}
     fac::Cholesky{TF, M}
 end
 
-default_linsolvertype(::StridedMatrix, ::StridedVector, ::Type{LeastSquares}) =
-    DenseCholeskySolver
+function default_linsolver(fdf::OnceDifferentiable{V, M, V}, x0::V,
+        ::Type{LeastSquares}) where {V<:StridedVector, M<:StridedMatrix}
+    value_jacobian!!(fdf, x0)
+    return init(DenseCholeskySolver, fdf.DF, fdf.F)
+end
 
 function _cholesky!(A::AbstractMatrix, d::AbstractVector)
     fac = cholesky!(Hermitian(A), check=false)

@@ -1,6 +1,28 @@
+"""
+    Hybrid{P} <: AbstractAlgorithm{P}
+
+A modified version of Powell's hybrid method (a trust region method with dogleg).
+The essentially same algorithm can solve both root-finding problems and
+least-squares problem.
+To indicate the problem type, set either `RootFinding` or `LeastSquares` as type parameter.
+For keyword arguments accepted by `init` and `solve` when using this algorithm,
+see [`HybridSolver`](@ref).
+
+# References
+- **Moré, Jorge J., Danny C. Sorenson, Burton S. Garbow, and Kenneth E. Hillstrom.** 1984.
+  "The MINPACK Project."
+  In *Sources and Development of Mathematical Software*,
+  ed. Wayne R. Cowell, 88-111. New Jersey: Prentice-Hall.
+- **Nocedal, Jorge, and Stephen J. Wright.** 2006.
+  *Numerical Optimization.* 2nd ed. New York: Springer.
+- **Powell, Michael J. D.** 1970.
+  "A Hybrid Method for Nonlinear Equations."
+  In *Numerical Methods for Nonlinear Algebraic Equations*,
+  ed. Philip Rabinowitz, 87-114. London: Gordon and Breach.
+"""
 struct Hybrid{P} <: AbstractAlgorithm{P} end
 
-mutable struct HybridSolver{T, L, V} <: AbstractSolver{T}
+struct HybridSolverState{T}
     iter::Int
     ncfail::Int
     ncsuc::Int
@@ -11,6 +33,10 @@ mutable struct HybridSolver{T, L, V} <: AbstractSolver{T}
     pnorm::T
     δ::T
     ρ::T
+end
+
+struct HybridSolver{T, L, V} <: AbstractSolver{T}
+    state::RefValue{HybridSolverState{T}}
     linsolver::L
     diagn::V
     newton::V
@@ -29,9 +55,34 @@ mutable struct HybridSolver{T, L, V} <: AbstractSolver{T}
     thres_nslow2::Int
 end
 
+"""
+    HybridSolver(fdf::OnceDifferentiable, x, fx, J, P; kwargs...)
+
+Construct `HybridSolver` for solving a problem of type `P` with [`Hybrid`](@ref) method.
+Users are not expected to call this method directly
+but should pass keyword arguments to `init` or `solve` instead.
+See also [`Hybrid`](@ref).
+
+# Keywords
+- `linsolver=default_linsolver(fdf, x0, P)`: solver for the underlying linear problems.
+- `factor_init::Real=1.0`: a factor for scaling the initial trust region radius.
+- `factor_up::Real=2.0`: a factor for expanding the trust region radius.
+- `factor_down::Real=0.5`: a factor for shrinking the trust region radius.
+- `scaling::Bool=true`: allow improving the scaling of trust region.
+- `rank1update::Bool=true`: allow using rank-1 update for the Jacobian matrix
+  and factorization.
+- `thres_jac::Integer=2`: recompute the Jacobian matrix
+  if the trust region is shrinked consecutively by the specified number of times;
+  setting a non-positive value results in recomputing the Jacobian matrix after each step.
+- `thres_nslow1::Integer=10`: signal slow solver progress if the reduction in residual norm
+  remains small for the specified number of consecutive steps.
+- `thres_nslow2::Integer=5`: signal slow solver progress
+  if there is no expansion of trust region after recomputing the Jacobian matrix
+  in the specified number of consecutive steps.
+"""
 function HybridSolver(fdf::OnceDifferentiable, x::AbstractVector, fx::AbstractVector,
         J::AbstractMatrix, P::Type{<:ProblemType};
-        linsolvertype=default_linsolvertype(J, fx, P),
+        linsolver=default_linsolver(fdf, x0, P),
         factor_init::Real=1.0, factor_up::Real=2.0, factor_down::Real=0.5,
         scaling::Bool=true, rank1update::Bool=true,
         thres_jac::Integer=2, thres_nslow1::Integer=10, thres_nslow2::Integer=5)
@@ -47,8 +98,7 @@ function HybridSolver(fdf::OnceDifferentiable, x::AbstractVector, fx::AbstractVe
     Jdx = similar(fx)
     w = similar(fx)
     v = similar(x)
-    # Set initial values
-    value_jacobian!!(fdf, x)
+    # Initial values should have been evaluated when initializing linsolver
     copyto!(fx, fdf.F)
     scaling ? set_scale!(diagn, J) : fill!(diagn, one(eltype(diagn)))
     fnorm = enorm(fx)
@@ -60,8 +110,8 @@ function HybridSolver(fdf::OnceDifferentiable, x::AbstractVector, fx::AbstractVe
         throw(ArgumentError("all factors must be positive"))
     Dx = scaled_enorm(diagn, x)
     δ = Dx > 0 ? factor_init * Dx : factor_init
-    linsolver = init(linsolvertype, J, fx)
-    return HybridSolver(1, 0, 0, 0, 0, false, fnorm, nan, δ, nan, linsolver, diagn,
+    state = HybridSolverState(1, 0, 0, 0, 0, false, fnorm, nan, δ, nan)
+    return HybridSolver(Ref(state), linsolver, diagn,
         newton, grad, df, Jdx, w, v, factor_init, factor_up, factor_down,
         scaling, rank1update, convert(Int, thres_jac),
         convert(Int, thres_nslow1), convert(Int, thres_nslow2))
@@ -116,41 +166,42 @@ function dogleg!(dx, linsolver, J, fx, diagn, δ, newton, grad)
     return dx
 end
 
-function (s::HybridSolver)(fdf::OnceDifferentiable, x::AbstractVector,
-        fx::AbstractVector, dx::AbstractVector)
-    T = eltype(x)
+function (s::HybridSolver{T})(fdf::OnceDifferentiable, x::AbstractVector,
+        fx::AbstractVector, dx::AbstractVector) where T
     xtrial, ftrial, J = fdf.x_f, fdf.F, fdf.DF
     p1, p5, p001, p0001 = 0.1, 0.5, 0.001, 0.0001
-    linsolver, diagn, Jdx, pnorm = s.linsolver, s.diagn, s.Jdx, s.pnorm
+    st, linsolver, diagn, Jdx = s.state[], s.linsolver, s.diagn, s.Jdx
+    iter, ncfail, ncsuc, nslow1, nslow2, moved, fnorm, pnorm, δ, ρ =
+        st.iter, st.ncfail, st.ncsuc, st.nslow1, st.nslow2, st.moved,
+            st.fnorm, st.pnorm, st.δ, st.ρ
 
     # Update trust region radius based on effectiveness of the last trial
-    ratio = s.ρ
-    if !isnan(ratio)
-        if ratio < p1
-            s.δ *= s.factor_down
-            s.ncsuc = 0
-            s.ncfail += 1
+    if !isnan(ρ)
+        if ρ < p1
+            δ *= s.factor_down
+            ncsuc = 0
+            ncfail += 1
         else
-            if ratio > 1 - p1
-                s.δ = pnorm * s.factor_up
-            elseif (ratio > p5 || s.ncsuc > 0)
-                s.δ = max(s.δ, pnorm * s.factor_up)
+            if ρ > 1 - p1
+                δ = pnorm * s.factor_up
+            elseif (ρ > p5 || ncsuc > 0)
+                δ = max(δ, pnorm * s.factor_up)
             end
-            s.ncfail = 0
-            s.ncsuc += 1
+            ncfail = 0
+            ncsuc += 1
         end
     end
 
     # Recompute Jacobian entirely or use rank-1 update?
     # The former is done at most once per iter
     # The latter is done repetitively to exploit information from df in last trial
-    recompute_jac = s.thres_jac > 0 ? s.ncfail === s.thres_jac : s.moved
+    recompute_jac = s.thres_jac > 0 ? ncfail === s.thres_jac : moved
     if recompute_jac
         jacobian!!(fdf, x)
-        s.thres_jac > 0 && (s.nslow2 += 1)
+        s.thres_jac > 0 && (nslow2 += 1)
         s.scaling && update_scale!(diagn, J)
         update!(linsolver, J)
-    elseif s.rank1update && (pnorm > eps(T) || s.iter === 1 && s.ncfail > 0)
+    elseif s.rank1update && (pnorm > eps(T) || iter === 1 && ncfail > 0)
         s.w .= (s.df .- Jdx) ./ pnorm
         s.v .= diagn.^2 .* dx ./ pnorm
         # Rank-1 update of Jacobian
@@ -161,53 +212,54 @@ function (s::HybridSolver)(fdf::OnceDifferentiable, x::AbstractVector,
     end
 
     # Obtain optimal step given the trust region
-    dogleg!(dx, linsolver, J, fx, diagn, s.δ, s.newton, s.grad)
+    dogleg!(dx, linsolver, J, fx, diagn, δ, s.newton, s.grad)
 
     # Compute actual reduction and predicted reduction
-    s.pnorm = pnorm = scaled_enorm(diagn, dx)
-    s.iter === 1 && s.δ > pnorm && (s.δ = pnorm)
+    pnorm = scaled_enorm(diagn, dx)
+    iter === 1 && δ > pnorm && (δ = pnorm)
     _value!!(fdf, x, dx)
     s.df .= ftrial .- fx
     fnorm1 = enorm(ftrial)
-    fnorm = s.fnorm
     actred = fnorm1 < fnorm ? 1 - fnorm1 / fnorm : -one(T)
-    Jdx = s.Jdx
     mul!(Jdx, J, dx)
     fp = s.w # Reuse w as cache
     fp .= Jdx .+ fx
     fnorm1p = enorm(fp)
     prered = fnorm1p < fnorm ? 1 - fnorm1p / fnorm : zero(T)
-    s.ρ = ratio = prered > 0 ? actred / prered : zero(T)
+    ρ = prered > 0 ? actred / prered : zero(T)
 
     # Step accepted?
-    if ratio > p0001
+    if ρ > p0001
         copyto!(x, xtrial)
         copyto!(fx, ftrial)
-        s.fnorm = fnorm1
-        s.iter += 1
-        s.moved = true
+        fnorm = fnorm1
+        iter += 1
+        moved = true
     else
-        s.moved = false
+        moved = false
     end
 
-    s.nslow1 = actred > p001 ? 0 : s.nslow1 + 1
-    actred > p1 && (s.nslow2 = 0)
+    nslow1 = actred > p001 ? 0 : nslow1 + 1
+    actred > p1 && (nslow2 = 0)
 
-    if s.nslow1 === s.thres_nslow1
-        if s.nslow2 >= s.thres_nslow2
-            @warn "iteration $(s.iter) is not making progress even with reevaluations of Jacobians; try a smaller value with option thres_jac"
-            return jac_noprogress
+    s.state[] =
+        HybridSolverState(iter, ncfail, ncsuc, nslow1, nslow2, moved, fnorm, pnorm, δ, ρ)
+
+    if nslow1 === s.thres_nslow1
+        if nslow2 >= s.thres_nslow2
+            @warn "iteration $(iter) is not making progress even with reevaluations of Jacobians; try a smaller value with option thres_jac"
+            return iter, jac_noprogress
         else
-            @warn "iteration $(s.iter) is not making progress"
-            return eval_noprogress
+            @warn "iteration $(iter) is not making progress"
+            return iter, eval_noprogress
         end
     else
-        return normal
+        return iter, normal
     end
 end
 
 function init(::Type{Hybrid{P}}, fdf::OnceDifferentiable, x0::AbstractVector;
-        linsolvertype=default_linsolvertype(fdf.DF, fdf.F, P),
+        linsolver=default_linsolver(fdf, x0, P),
         factor_init::Real=1.0, factor_up::Real=2.0, factor_down::Real=0.5,
         scaling=true, rank1update=true,
         thres_jac=2, thres_nslow1=10, thres_nslow2=5, kwargs...) where P
@@ -215,7 +267,7 @@ function init(::Type{Hybrid{P}}, fdf::OnceDifferentiable, x0::AbstractVector;
     fx = copy(fdf.F)
     dx = similar(x) # Preserve the array type
     fill!(dx, convert(eltype(x), NaN))
-    solver = HybridSolver(fdf, x, fx, fdf.DF, P; linsolvertype=linsolvertype,
+    solver = HybridSolver(fdf, x, fx, fdf.DF, P; linsolver=linsolver,
         factor_init=factor_init, factor_up=factor_up, factor_down=factor_down,
         scaling=scaling, rank1update=rank1update,
         thres_jac=thres_jac, thres_nslow1=thres_nslow1, thres_nslow2=thres_nslow2)
@@ -234,16 +286,16 @@ algorithmtype(::HybridSolver) = Hybrid
 
 function show(io::IO, s::HybridSolver)
     print(io, typeof(s).name.name)
-    print(io, "(iter ", s.iter, " => ")
+    print(io, "(iter ", getiter(s), " => ")
     @printf(io, "‖f(x)‖₂ = %9.3e ‖∇f(x)‖₂ = %9.3e ‖Ddx‖₂ = %9.3e δ = %9.3e ρ = %9.3e)",
-        s.fnorm, enorm(getgrad(s)), s.pnorm, s.δ, s.ρ)
+        getfnorm(s), enorm(getgrad(s)), getpnorm(s), s.state[].δ, s.state[].ρ)
 end
 
 function _show_trace(io::IO, s::HybridSolver, newline::Bool)
-    print(io, "  iter ", lpad(s.iter, 4), "  =>  ")
+    print(io, "  iter ", lpad(getiter(s), 4), "  =>  ")
     @printf(io,
         "‖f(x)‖₂ = %13.6e  ‖∇f(x)‖₂ = %13.6e  ‖Ddx‖₂ = %13.6e  δ = %13.6e  ρ = %13.6e",
-        s.fnorm, enorm(getgrad(s)), s.pnorm, s.δ, s.ρ)
+        getfnorm(s), enorm(getgrad(s)), getpnorm(s), s.state[].δ, s.state[].ρ)
     newline && println(io)
 end
 
