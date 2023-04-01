@@ -8,8 +8,8 @@ using SnoopPrecompile: @precompile_setup, @precompile_all_calls
         out[2:n] .= 10.0 .* (view(x,2:n) .- view(x,1:n-1) .* view(x, 1:n-1))
         out
     end
-    x0_1 = ones(10)
-    x0_1[1] = -1.2
+    x0_1 = ones(10); x0_1[1] = -1.2
+    fdf = OnceDifferentiable(p1_f!, x0_1, similar(x0_1))
     function p15_f!(out, x)
         out[1] = (x[1] * x[1] + x[2] * x[3]) - 0.0001
         out[2] = (x[1] * x[2] + x[2] * x[4]) - 1.0
@@ -21,7 +21,8 @@ using SnoopPrecompile: @precompile_setup, @precompile_all_calls
     @precompile_all_calls begin
         solve(Hybrid, p1_f!, x0_1)
         solve(Hybrid, p15_f!, x0_15, thres_jac=0)
-        solve(Hybrid{LeastSquares}, p1_f!, x0_1)
+        solve(Hybrid{LeastSquares}, fdf, x0_1;
+            linsolver=init(DenseCholeskySolver, fdf, x0_1; rank1chol=false))
         solve(Hybrid{LeastSquares}, p15_f!, x0_15, thres_jac=0)
     end
 end

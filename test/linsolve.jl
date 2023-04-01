@@ -40,7 +40,25 @@ end
     x0 = zeros(2)
     fdf = OnceDifferentiable(f!, j!, x0, similar(x0))
     s = default_linsolver(fdf, x0, LeastSquares)
+    @test typeof(s).parameters[5] === Nothing
     Y = zeros(2)
     J = fdf.DF
     @test solve!(s, Y, copy(J), copy(fdf.F)) ≈ cholesky(J'J) \ J'fdf.F
+
+    w = randn(2)
+    v = randn(2)
+    J1 = J + w*v'
+    JJ1 = J1'J1
+    update!(s, J, w, v)
+    @test JJ1 ≈ s.fac.U's.fac.U
+
+    M, N = 10, 4
+    J = randn(M, N)
+    s1 = init(DenseCholeskySolver, J, randn(M))
+    @test typeof(s1).parameters[5] === Vector{Float64}
+    w = randn(M)
+    v = randn(N)
+    update!(s1, copy(J), copy(w), copy(v))
+    J1 = J .+ w .* v'
+    @test s1.fac.U's1.fac.U ≈ J1'J1
 end

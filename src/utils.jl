@@ -25,6 +25,13 @@ end
     return sqrt(e2)
 end
 
+function _init!(fdf::OnceDifferentiable, x0)
+    fdf.f_calls[1] = 0
+    fdf.df_calls[1] = 0
+    value_jacobian!!(fdf, x0)
+    return fdf
+end
+
 @inline function _value!!(fdf::OnceDifferentiable, x, dx)
     F = fdf.F
     xdx = fdf.x_f

@@ -117,7 +117,40 @@ function HybridSolver(fdf::OnceDifferentiable, x::AbstractVector, fx::AbstractVe
         convert(Int, thres_nslow1), convert(Int, thres_nslow2))
 end
 
-function dogleg!(dx, linsolver, J, fx, diagn, δ, newton, grad)
+# ! This method reuses arrays from s
+function init(s::NonlinearSystem{P,V,M,<:HybridSolver{T}}, x0::V;
+        factor_init::Real=s.solver.factor_init, factor_up::Real=s.solver.factor_up,
+        factor_down::Real=s.solver.factor_down, scaling::Bool=s.solver.scaling,
+        rank1update::Bool=s.solver.rank1update, thres_jac::Integer=s.solver.thres_jac,
+        thres_nslow1::Integer=s.solver.thres_nslow1,
+        thres_nslow2::Integer=s.solver.thres_nslow2, kwargs...) where {P,V,M,T}
+    copyto!(s.x, x0)
+    nan = convert(eltype(s.x), NaN)
+    fill!(s.dx, nan)
+    ss, fdf = s.solver, s.fdf
+    linsolver = getlinsolver(s)
+    init(linsolver, fdf, s.x)
+    fill!(ss.grad, nan)
+    copyto!(s.fx, fdf.F)
+    diagn = ss.diagn
+    scaling ? set_scale!(diagn, fdf.DF) : fill!(diagn, one(eltype(diagn)))
+    fnorm = enorm(s.fx)
+    factor_init = convert(T, factor_init)
+    factor_up = convert(T, factor_up)
+    factor_down = convert(T, factor_down)
+    factor_init > 0 && factor_up > 0 && factor_down > 0 ||
+        throw(ArgumentError("all factors must be positive"))
+    Dx = scaled_enorm(diagn, s.x)
+    δ = Dx > 0 ? factor_init * Dx : factor_init
+    state = HybridSolverState(1, 0, 0, 0, 0, false, fnorm, nan, δ, nan)
+    solver = HybridSolver(Ref(state), linsolver, diagn,
+        ss.newton, ss.grad, ss.df, ss.Jdx, ss.w, ss.v, factor_init, factor_up, factor_down,
+        scaling, rank1update, convert(Int, thres_jac),
+        convert(Int, thres_nslow1), convert(Int, thres_nslow2))
+    return NonlinearSystem(P, s.fdf, s.x, s.fx, s.dx, solver; kwargs...)
+end
+
+function dogleg!(dx, linsolver, J, fx, diagn, δ, newton, grad, w)
     # Obtain Newton step by solving the linear problem
     solve!(linsolver, newton, J, fx)
     newton .*= -one(eltype(newton))
@@ -142,8 +175,8 @@ function dogleg!(dx, linsolver, J, fx, diagn, δ, newton, grad)
 
     # Compute the norm of Cauchy point
     grad ./= gnorm .* diagn
-    mul!(dx, J, grad)
-    sgnorm = gnorm / enorm2(dx)
+    mul!(w, J, grad)
+    sgnorm = gnorm / enorm2(w)
 
     # Cauchy point is out of the trust region
     if sgnorm > δ
@@ -204,15 +237,14 @@ function (s::HybridSolver{T})(fdf::OnceDifferentiable, x::AbstractVector,
     elseif s.rank1update && (pnorm > eps(T) || iter === 1 && ncfail > 0)
         s.w .= (s.df .- Jdx) ./ pnorm
         s.v .= diagn.^2 .* dx ./ pnorm
-        # Rank-1 update of Jacobian
-        BLAS.ger!(one(T), s.w, s.v, J)
-        s.scaling && update_scale!(diagn, J)
-        # Rank-1 update of factorization
+        # Rank-1 update of Jacobian and factorization
         update!(linsolver, J, s.w, s.v)
+        s.scaling && update_scale!(diagn, J)
     end
 
     # Obtain optimal step given the trust region
-    dogleg!(dx, linsolver, J, fx, diagn, δ, s.newton, s.grad)
+    # w is used as a cache
+    dogleg!(dx, linsolver, J, fx, diagn, δ, s.newton, s.grad, s.w)
 
     # Compute actual reduction and predicted reduction
     pnorm = scaled_enorm(diagn, dx)

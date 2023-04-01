@@ -522,11 +522,11 @@ residnorms = zeros(length(specs), K)
 iters = zeros(Int, length(specs), K)
 
 for (k, (name, algo)) in enumerate(algos)
-    for (p, (title, f!, g!, x0)) in enumerate(specs)
+    for (p, (title, ff, gg, x0)) in enumerate(specs)
         println("  Algorithm: ", rpad(name, 16), " Problem ", lpad(p, 2), ": ", title)
         # With least squares, may get gtol_reached earlier than ftol_reached
-        s = init(algo, f!, g!, x0, factor_up=3, rank1update=true, thres_jac=2,
-            ftol=1e-10, gtol=0, maxiter=500)
+        s = init(algo, ff, gg, x0, factor_up=3, rank1update=true, thres_jac=2,
+            ftol=1e-10, gtol=0, maxiter=100)
         try
             solve!(s)
             errors[p,k] = nothing
@@ -539,7 +539,7 @@ for (k, (name, algo)) in enumerate(algos)
         end
         # Root-finding problems with LU all succeed
         # Some problems are not solved with Cholesky least squares
-        if p ∈ (7, 13, 14) && name == :Hybrid_ls
+        if p ∈ (7,) && name == :Hybrid_ls
             @test Symbol(getexitstate(s)) ∈ (:failed, :maxiter_reached)
         else
             @test errors[p,k] === nothing
