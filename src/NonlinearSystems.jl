@@ -1,9 +1,10 @@
 module NonlinearSystems
 
-using Base: StridedMatrix, StridedVector, RefValue, Fix1, permute!!
+using Base: RefValue, Fix1, permute!!
 using CommonSolve: solve
 using FastLapackInterface: LUWs
-using LinearAlgebra: BLAS, LAPACK, LU, Cholesky, cholesky!, Hermitian, ldiv!, mul!
+using LinearAlgebra: BLAS, LAPACK, LU, Cholesky, cholesky!, Hermitian, ldiv!, mul!,
+    lowrankupdate!
 using NLSolversBase: OnceDifferentiable, value_jacobian!!, jacobian!!
 using PositiveFactorizations
 using Printf

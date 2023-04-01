@@ -90,9 +90,10 @@ size(s::NonlinearSystem) = (nvar(s), nequ(s))
 size(s::NonlinearSystem, dim::Integer) =
     dim == 1 ? nequ(s) : dim == 2 ? nvar(s) : throw(ArgumentError("dim can only be 1 or 2"))
 
-@inline getiter(s::NonlinearSystem) = getiter(s.solver)
-@inline getiterstate(s::NonlinearSystem) = s.state[][1]
-@inline getexitstate(s::NonlinearSystem) = s.state[][2]
+getiter(s::NonlinearSystem) = getiter(s.solver)
+getlinsolver(s::NonlinearSystem) = getlinsolver(s.solver)
+getiterstate(s::NonlinearSystem) = s.state[][1]
+getexitstate(s::NonlinearSystem) = s.state[][2]
 
 @inline _test_ftol_i(s::NonlinearSystem, i::Int) =
     @inbounds(abs(s.fx[i]) < s.ftol)
@@ -140,15 +141,16 @@ function solve!(s::NonlinearSystem)
     return s
 end
 
+solve!(s::NonlinearSystem, x0; kwargs...) = solve!(init(s, x0; kwargs...))
+
 init(algo::AbstractAlgorithm, args...; kwargs...) =
     init(typeof(algo), args...; kwargs...)
 
-init(Algo::Type{<:AbstractAlgorithm}, f::Function, x0::AbstractVector; kwargs...) =
+init(Algo::Type{<:AbstractAlgorithm}, f, x0::AbstractVector; kwargs...) =
     init(Algo, OnceDifferentiable(f, similar(x0), similar(x0)), x0; kwargs...)
 
-init(Algo::Type{<:AbstractAlgorithm}, f::Function, j::Function, x0::AbstractVector;
-    kwargs...) =
-        init(Algo, OnceDifferentiable(f, j, similar(x0), similar(x0)), x0; kwargs...)
+init(Algo::Type{<:AbstractAlgorithm}, f, j, x0::AbstractVector; kwargs...) =
+    init(Algo, OnceDifferentiable(f, j, similar(x0), similar(x0)), x0; kwargs...)
 
 function show(io::IO, s::NonlinearSystem{P}) where P
     print(io, nequ(s), '×', nvar(s), ' ', typeof(s).name.name, '{', P, "}(")
