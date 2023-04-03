@@ -200,7 +200,7 @@ function dogleg!(dx, linsolver, J, fx, diagn, δ, newton, grad, w)
 end
 
 function (s::HybridSolver{T})(fdf::OnceDifferentiable, x::AbstractVector,
-        fx::AbstractVector, dx::AbstractVector) where T
+        fx::AbstractVector, dx::AbstractVector, lb, ub) where T
     xtrial, ftrial, J = fdf.x_f, fdf.F, fdf.DF
     p1, p5, p001, p0001 = 0.1, 0.5, 0.001, 0.0001
     st, linsolver, diagn, Jdx = s.state[], s.linsolver, s.diagn, s.Jdx
@@ -245,6 +245,18 @@ function (s::HybridSolver{T})(fdf::OnceDifferentiable, x::AbstractVector,
     # Obtain optimal step given the trust region
     # w is used as a cache
     dogleg!(dx, linsolver, J, fx, diagn, δ, s.newton, s.grad, s.w)
+
+    # Impose box constraints
+    if lb !== nothing
+        @inbounds for i in eachindex(dx)
+            dx[i] = max(dx[i], lb[i] - x[i])
+        end
+    end
+    if ub !== nothing
+        @inbounds for i in eachindex(dx)
+            dx[i] = min(dx[i], ub[i] - x[i])
+        end
+    end
 
     # Compute actual reduction and predicted reduction
     pnorm = scaled_enorm(diagn, dx)

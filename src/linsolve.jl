@@ -17,20 +17,20 @@ function luupdate!(lu::LU, p::AbstractVector, w::AbstractVector, v::AbstractVect
     ipiv2perm!(p, getfield(lu, :ipiv), m)
     permute!!(w, p)
     F = getfield(lu, :factors)
-    @inbounds for i in 1:m
+    @inbounds for i in 1:min(m, n)
         wi = w[i]
         vi = v[i]
         Fii = F[i,i] + wi * vi
         F[i,i] = Fii
         vi = vi / Fii
         v[i] = vi
-        for j in i+1:n
+        for j in i+1:m
             Fji = F[j,i]
             wj = w[j] - wi * Fji
             w[j] = wj
             F[j,i] = Fji + wj * vi
         end
-        for j in i+1:m
+        for j in i+1:n
             vj = v[j]
             Fij = F[i,j] + wi * vj
             F[i,j] = Fij
@@ -94,9 +94,8 @@ end
 function _lowrankdowndate!(C::Cholesky, v::AbstractVector)
     A = C.factors
     n = length(v)
-    if size(C, 1) != n
-        throw(DimensionMismatch("updating vector must fit size of factorization"))
-    end
+    size(C, 1) == n || throw(DimensionMismatch(
+        "updating vector must fit size of factorization"))
     if C.uplo == 'U'
         conj!(v)
     end

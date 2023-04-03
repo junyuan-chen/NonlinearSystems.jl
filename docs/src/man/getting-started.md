@@ -54,7 +54,22 @@ The solution can be retrieved by accessing the corresponding field:
 s.x
 ```
 
-To solve a least-squares problem, specify the algorithm as `Hybrid{LeastSquares}` instead:
+In general, a nonlinear system of equations may have multiple solutions or no solution.
+If only solutions that fall in certain regions are of interest,
+we may impose lower and upper bounds that force the solver to
+only seek solution candidates within the bounded areas:
+
+```@repl getting-started
+solve(Hybrid, f!, ones(2), lower=fill(0.5,2), upper=fill(2.0,2))
+```
+
+Notice that we have found a different solution in the above example.
+
+In practice, we often do not expect the existence of solutions
+that solve the equations exactly as identities.
+Instead, we may solve a least-squares problem
+that minimizes the Euclidean norm of residuals.
+To do so, simply specify the algorithm type as `Hybrid{LeastSquares}`:
 
 ```@repl getting-started
 s = solve(Hybrid{LeastSquares}, f!, x0)
@@ -77,7 +92,7 @@ To inspect the solver iteration, summary information can be printed for each eva
 s = solve(Hybrid{LeastSquares}, f!, x0, showtrace=1);
 ```
 
-Notice that all relevant information is collected in the same object:
+Notice that all relevant information is collected in a single object:
 
 ```@docs
 NonlinearSystem
@@ -85,7 +100,7 @@ NonlinearSystem
 
 Instead of calling `solve` or `solve!`,
 which simply iterates `NonlinearSystem` in a loop,
-one may manually iterate the solver steps as follows:
+we may manually iterate the solver steps as follows:
 
 ```@repl getting-started
 s = init(Hybrid{LeastSquares}, f!, x0);
