@@ -18,8 +18,8 @@
     @test getlinsolver(p.solver) isa DenseLUSolver
     # Type parameters for LU are changed
     if VERSION > v"1.8.0-DEV"
-        @test sprint(show, MIME("text/plain"), p)[1:290] == """
-            2×2 NonlinearSystem{RootFinding, Vector{Float64}, Matrix{Float64}, HybridSolver{Float64, DenseLUSolver{LU{Float64, Matrix{Float64}, Vector{Int64}}}, Vector{Float64}}}:
+        @test sprint(show, MIME("text/plain"), p)[1:308] == """
+            2×2 NonlinearSystem{RootFinding, Vector{Float64}, Matrix{Float64}, HybridSolver{Float64, DenseLUSolver{LU{Float64, Matrix{Float64}, Vector{Int64}}}, Vector{Float64}}, Nothing, Nothing}:
               Problem type:                 Root finding
               Algorithm:                    Hybrid
               Candidate (x):                [1.04"""
@@ -36,6 +36,17 @@
     p0 = solve!(p0, x0; ftol=1e-8) # The returned p0 is not the input p0
     @test p0.x ≈ x
 
+    pb = solve(Hybrid, f!, x0, lower=[-1,-1], upper=fill(1.1,2))
+    @test pb.x ≈ [0, 1] atol=1e-8
+    pb = solve(Hybrid, f!, x0, upper=[0.1,0.5])
+    @test pb.x[2] <= 0.5
+    @test Symbol(getexitstate(pb)) === :failed
+    pb = solve(Hybrid, f!, [1.0, 1.0], lower=[0.1,0.5], upper=fill(2.0,2))
+    @test pb.x ≈ [1.1011684360748017, 1.3770065499713244] atol=1e-8
+    @test Symbol(getexitstate(pb)) === :ftol_reached
+    @test_throws ArgumentError solve(Hybrid, f!, x0, upper=[-1,3])
+    @test_throws ArgumentError solve(Hybrid, f!, x0, lower=[0.1,0])
+
     fdf = OnceDifferentiable(f!, j!, x0, similar(x0))
     p1 = init(Hybrid, fdf, x0, xtol=1e-3)
     @test typeof(p1).parameters[1] === RootFinding
@@ -45,8 +56,8 @@
     p2 = solve(Hybrid{LeastSquares}(), f!, j!, x0)
     @test Symbol(getexitstate(p2)) === :ftol_reached
     @test sprint(show, p2)[1:46] == "2×2 NonlinearSystem{LeastSquares}(Hybrid, 9.8"
-    @test sprint(show, MIME("text/plain"), p2)[1:311] == """
-        2×2 NonlinearSystem{LeastSquares, Vector{Float64}, Matrix{Float64}, HybridSolver{Float64, DenseCholeskySolver{Float64, Int8, Matrix{Float64}, Vector{Float64}, Nothing}, Vector{Float64}}}:
+    @test sprint(show, MIME("text/plain"), p2)[1:329] == """
+        2×2 NonlinearSystem{LeastSquares, Vector{Float64}, Matrix{Float64}, HybridSolver{Float64, DenseCholeskySolver{Float64, Int8, Matrix{Float64}, Vector{Float64}, Nothing}, Vector{Float64}}, Nothing, Nothing}:
           Problem type:                 Least squares
           Algorithm:                    Hybrid
           Candidate (x):                [1.04"""
@@ -59,6 +70,9 @@
             HybridSolver{Float64, DenseLUSolver{LU{Float64, Matrix{Float64}, Vector{Int64}}}, Vector{Float64}}:
               iter   10  =>  ‖f(x)‖₂ =  9.84"""
     end
+
+    pb = solve(Hybrid{LeastSquares}, f!, [1.0,1.0], lower=[0.1,0.5], upper=fill(2.0,2))
+    @test pb.x ≈ [1.1011684360748017, 1.3770065499713244] atol=1e-8
 
     p3 = solve(Hybrid{LeastSquares}, f!, j!, x0, gtol=1)
     @test Symbol(getexitstate(p3)) === :gtol_reached

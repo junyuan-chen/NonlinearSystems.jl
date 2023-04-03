@@ -34,11 +34,14 @@ end
     failed
 end
 
-struct NonlinearSystem{P<:ProblemType, V, M, S<:AbstractSolver}
+struct NonlinearSystem{P<:ProblemType, V, M, S<:AbstractSolver,
+        LB<:Union{AbstractVector, Nothing}, UB<:Union{AbstractVector, Nothing}}
     fdf::OnceDifferentiable{V, M, V}
     x::V
     fx::V
     dx::V
+    lb::LB
+    ub::UB
     solver::S
     maxiter::Int
     ftol::Float64
@@ -61,6 +64,10 @@ a specific solution algorithm is passed to the constructor of `NonlinearSystem`.
 For the relevant solution algorithms, see [`Hybrid`](@ref).
 
 # Keywords
+- `lower::Union{AbstractVector, Nothing}=nothing`: element-wise lower bounds
+  for solution candidates.
+- `upper::Union{AbstractVector, Nothing}=nothing`: element-wise upper bounds
+  for solution candidates.
 - `maxiter::Integer=1000`: maximum number of iteration allowed before terminating.
 - `ftol::Real=1e-8`: absolute tolerance for the infinity norm of residuals `fx`.
 - `gtol::Real=1e-10`: absolute tolerance for the infinity norm of gradient vector;
@@ -74,11 +81,26 @@ For the relevant solution algorithms, see [`Hybrid`](@ref).
 """
 function NonlinearSystem(::Type{P}, fdf::OnceDifferentiable{V,M,V}, x::AbstractVector,
         fx::AbstractVector, dx::AbstractVector, solver::AbstractSolver;
+        lower::Union{AbstractVector, Nothing}=nothing,
+        upper::Union{AbstractVector, Nothing}=nothing,
         maxiter::Integer=1000, ftol::Real=1e-8, gtol::Real=1e-10,
         xtol::Real=0.0, xtolr::Real=0.0, showtrace::Union{Bool,Integer}=false) where {P,V,M}
+    if lower !== nothing
+        length(lower) == length(dx) || throw(DimensionMismatch(
+            "length of lower is expected to be $(length(dx))"))
+        all(i->x[i]>=lower[i], eachindex(lower)) || throw(ArgumentError(
+            "initial values cannot be smaller than lower bounds"))
+    end
+    if upper !== nothing
+        length(upper) == length(dx) || throw(DimensionMismatch(
+            "length of upper is expected to be $(length(dx))"))
+        all(i->x[i]<=upper[i], eachindex(upper)) || throw(ArgumentError(
+            "initial values cannot be greater than upper bounds"))
+    end
     showtrace === true && (showtrace = 20)
     showtrace === false && (showtrace = 0)
-    return NonlinearSystem{P, V, M, typeof(solver)}(fdf, x, fx, dx, solver,
+    return NonlinearSystem{P, V, M, typeof(solver), typeof(lower), typeof(upper)}(
+        fdf, x, fx, dx, lower, upper, solver,
         convert(Int, maxiter), convert(Float64, ftol), convert(Float64, gtol),
         convert(Float64, xtol), convert(Float64, xtolr),
         Ref((normal, inprogress)), showtrace)
@@ -122,7 +144,7 @@ end
 
 @inline function iterate(s::NonlinearSystem, state=(1, normal, inprogress))
     # How iter changes depends on the specific algorithm
-    iter, iterstate = s.solver(s.fdf, s.x, s.fx, s.dx)
+    iter, iterstate = s.solver(s.fdf, s.x, s.fx, s.dx, s.lb, s.ub)
     exitstate = assess_state(s, iterstate)
     s.state[] = (iterstate, exitstate)
     return s, (iter, iterstate, exitstate) # Termination is never enforced here
