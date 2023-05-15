@@ -1,21 +1,15 @@
 const PFac = PositiveFactorizations
 
-# A non-allocating version of ipiv2perm from LinearAlgebra/src/lu.jl
-function ipiv2perm!(p::AbstractVector{T}, v::AbstractVector{T}, maxi::Integer) where T
-    length(p) == maxi || throw(DimensionMismatch("length of p must be $maxi"))
-    @inbounds for i in 1:maxi
-        p[i] = i
-    end
+function apply_ipiv_perm!(w::AbstractVector, v::AbstractVector{<:Integer})
     @inbounds for i in eachindex(v)
-        p[i], p[v[i]] = p[v[i]], p[i]
+        w[i], w[v[i]] = w[v[i]], w[i]
     end
-    return p
+    return w
 end
 
 function luupdate!(lu::LU, p::AbstractVector, w::AbstractVector, v::AbstractVector)
     m, n = size(lu)
-    ipiv2perm!(p, getfield(lu, :ipiv), m)
-    permute!!(w, p)
+    apply_ipiv_perm!(w, getfield(lu, :ipiv), m)
     F = getfield(lu, :factors)
     @inbounds for i in 1:min(m, n)
         wi = w[i]
