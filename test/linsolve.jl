@@ -20,8 +20,7 @@ end
         v = rand(N)
         f = lu(A)
         A1 = A + w * v'
-        p = zeros(Int, N)
-        f1 = luupdate!(f, p, w, v)
+        f1 = luupdate!(f, w, v)
         LU1 = f1.L * f1.U
         PA1 = f.P * A1
         @test PA1 ≈ LU1
