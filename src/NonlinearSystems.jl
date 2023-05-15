@@ -1,6 +1,6 @@
 module NonlinearSystems
 
-using Base: RefValue, Fix1, permute!!
+using Base: RefValue, Fix1
 using CommonSolve: solve
 using FastLapackInterface: LUWs
 using LinearAlgebra: BLAS, LAPACK, LU, Cholesky, cholesky!, Hermitian, ldiv!, mul!,
