@@ -1,21 +1,15 @@
 const PFac = PositiveFactorizations
 
-# A non-allocating version of ipiv2perm from LinearAlgebra/src/lu.jl
-function ipiv2perm!(p::AbstractVector{T}, v::AbstractVector{T}, maxi::Integer) where T
-    length(p) == maxi || throw(DimensionMismatch("length of p must be $maxi"))
-    @inbounds for i in 1:maxi
-        p[i] = i
+function apply_ipiv_perm!(w::AbstractVector, p::AbstractVector{<:Integer})
+    @inbounds for i in eachindex(p)
+        w[i], w[p[i]] = w[p[i]], w[i]
     end
-    @inbounds for i in eachindex(v)
-        p[i], p[v[i]] = p[v[i]], p[i]
-    end
-    return p
+    return w
 end
 
-function luupdate!(lu::LU, p::AbstractVector, w::AbstractVector, v::AbstractVector)
+function luupdate!(lu::LU, w::AbstractVector, v::AbstractVector)
     m, n = size(lu)
-    ipiv2perm!(p, getfield(lu, :ipiv), m)
-    permute!!(w, p)
+    apply_ipiv_perm!(w, getfield(lu, :ipiv))
     F = getfield(lu, :factors)
     @inbounds for i in 1:min(m, n)
         wi = w[i]
@@ -43,7 +37,6 @@ end
 mutable struct DenseLUSolver{F}
     ws::LUWs
     fac::F
-    perm::Vector{Int}
 end
 
 default_linsolver(fdf::OnceDifferentiable{V, M, V}, x0::V,
@@ -57,7 +50,7 @@ function init(::Type{DenseLUSolver}, J::AbstractMatrix, f::AbstractVector)
     ws = LUWs(J)
     # Do not destroy the original J
     fac = LU(LAPACK.getrf!(ws, copy(J))...)
-    return DenseLUSolver(ws, fac, Vector{Int}(undef, size(J, 1)))
+    return DenseLUSolver(ws, fac)
 end
 
 init(s::DenseLUSolver, fdf::OnceDifferentiable, x0::AbstractVector) =
@@ -67,7 +60,7 @@ update!(s::DenseLUSolver{<:LU}, J::AbstractMatrix) =
     (s.fac = LU(LAPACK.getrf!(s.ws, copyto!(getfield(s.fac, :factors), J))...); nothing)
 
 update!(s::DenseLUSolver{<:LU}, J::AbstractMatrix, w::AbstractVector, v::AbstractVector) =
-    (BLAS.ger!(one(eltype(J)), w, v, J); luupdate!(s.fac, s.perm, w, v); nothing)
+    (BLAS.ger!(one(eltype(J)), w, v, J); luupdate!(s.fac, w, v); nothing)
 
 solve!(s::DenseLUSolver{<:LU}, Y, J, F) = ldiv!(Y, s.fac, F)
 
