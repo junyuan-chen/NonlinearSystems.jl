@@ -10,14 +10,14 @@ LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 NLSolversBase = "d41bc354-129a-5804-8e4c-c37616107c6c"
 PositiveFactorizations = "85a6dd25-e78a-55b7-8502-1745935b8125"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
-SnoopPrecompile = "66db9d55-30c0-4569-8b51-7e840670fc0c"
+PrecompileTools = "aea7be01-6a6a-4083-8856-8a6e6704d82a"
 
 [compat]
 CommonSolve = "0.2"
 FastLapackInterface = "1.2"
 NLSolversBase = "7.6"
 PositiveFactorizations = "0.2.4"
-SnoopPrecompile = "1"
+PrecompileTools = "1"
 julia = "1.6"
 
 [extras]
