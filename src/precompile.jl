@@ -1,6 +1,6 @@
-using SnoopPrecompile: @precompile_setup, @precompile_all_calls
+using PrecompileTools: @setup_workload, @compile_workload
 
-@precompile_setup begin
+@setup_workload begin
     # Create sample problems
     function p1_f!(out, x)
         n = length(x)
@@ -18,7 +18,7 @@ using SnoopPrecompile: @precompile_setup, @precompile_all_calls
         out
     end
     x0_15 = [1.0, 0.0, 0.0, 1.0]
-    @precompile_all_calls begin
+    @compile_workload begin
         solve(Hybrid, p1_f!, x0_1)
         solve(Hybrid, p15_f!, x0_15, thres_jac=0)
         solve(Hybrid{LeastSquares}, fdf, x0_1;
