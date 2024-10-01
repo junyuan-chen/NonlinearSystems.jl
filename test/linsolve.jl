@@ -33,6 +33,21 @@ end
     s = default_linsolver(fdf, x0, RootFinding)
     Y = zeros(2)
     @test solve!(s, Y, copy(fdf.DF), copy(fdf.F)) ≈ fdf.DF \ fdf.F
+
+    x = rand(2)
+    init(s, fdf, x)
+    F = zeros(2)
+    J = zeros(2, 2)
+    @test fdf.F == f!(F, x)
+    @test fdf.DF == j!(J, x)
+    x1 = rand(2)
+    init(s, fdf, x1; initf=false)
+    @test fdf.F == f!(F, x)
+    @test fdf.DF == j!(J, x1)
+    x2 = rand(2)
+    init(s, fdf, x2; initdf=false)
+    @test fdf.F == f!(F, x2)
+    @test fdf.DF == j!(J, x1)
 end
 
 @testset "DenseCholeskySolver" begin
@@ -60,4 +75,19 @@ end
     update!(s1, copy(J), copy(w), copy(v))
     J1 = J .+ w .* v'
     @test s1.fac.U's1.fac.U ≈ J1'J1
+
+    x = rand(2)
+    init(s, fdf, x)
+    F = zeros(2)
+    J = zeros(2, 2)
+    @test fdf.F == f!(F, x)
+    @test fdf.DF == j!(J, x)
+    x1 = rand(2)
+    init(s, fdf, x1; initf=false)
+    @test fdf.F == f!(F, x)
+    @test fdf.DF == j!(J, x1)
+    x2 = rand(2)
+    init(s, fdf, x2; initdf=false)
+    @test fdf.F == f!(F, x2)
+    @test fdf.DF == j!(J, x1)
 end

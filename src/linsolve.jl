@@ -43,8 +43,9 @@ default_linsolver(fdf::OnceDifferentiable{V, M, V}, x0::V,
     ::Type{RootFinding}) where {V<:AbstractVector, M<:AbstractMatrix} =
         init(DenseLUSolver, fdf, x0)
 
-init(::Type{DenseLUSolver}, fdf::OnceDifferentiable, x0::AbstractVector) =
-    (_init!(fdf, x0); init(DenseLUSolver, fdf.DF, fdf.F))
+init(::Type{DenseLUSolver}, fdf::OnceDifferentiable, x0::AbstractVector;
+    initf::Bool=true, initdf::Bool=true) =
+        (_init!(fdf, x0, initf, initdf); init(DenseLUSolver, fdf.DF, fdf.F))
 
 function init(::Type{DenseLUSolver}, J::AbstractMatrix, f::AbstractVector)
     ws = LUWs(J)
@@ -53,8 +54,9 @@ function init(::Type{DenseLUSolver}, J::AbstractMatrix, f::AbstractVector)
     return DenseLUSolver(ws, fac)
 end
 
-init(s::DenseLUSolver, fdf::OnceDifferentiable, x0::AbstractVector) =
-    (_init!(fdf, x0); update!(s, fdf.DF); s)
+init(s::DenseLUSolver, fdf::OnceDifferentiable, x0::AbstractVector;
+    initf::Bool=true, initdf::Bool=true) =
+        (_init!(fdf, x0, initf, initdf); update!(s, fdf.DF); s)
 
 update!(s::DenseLUSolver{<:LU}, J::AbstractMatrix) =
     (s.fac = LU(LAPACK.getrf!(s.ws, copyto!(getfield(s.fac, :factors), J))...); nothing)
@@ -144,8 +146,9 @@ default_linsolver(fdf::OnceDifferentiable{V, M, V}, x0::V,
     ::Type{LeastSquares}) where {V<:AbstractVector, M<:AbstractMatrix} =
         init(DenseCholeskySolver, fdf, x0)
 
-init(::Type{DenseCholeskySolver}, fdf::OnceDifferentiable, x0::AbstractVector; kwargs...) =
-    (_init!(fdf, x0); init(DenseCholeskySolver, fdf.DF, fdf.F; kwargs...))
+init(::Type{DenseCholeskySolver}, fdf::OnceDifferentiable, x0::AbstractVector;
+    initf::Bool=true, initdf::Bool=true, kwargs...) =
+        (_init!(fdf, x0, initf, initdf); init(DenseCholeskySolver, fdf.DF, fdf.F; kwargs...))
 
 function init(::Type{DenseCholeskySolver}, J::AbstractMatrix, f::AbstractVector;
         rank1chol::Bool=length(f)>3)
@@ -160,8 +163,9 @@ function init(::Type{DenseCholeskySolver}, J::AbstractMatrix, f::AbstractVector;
     end
 end
 
-init(s::DenseCholeskySolver, fdf::OnceDifferentiable{V, M, V}, x0::V) where {V, M} =
-    (_init!(fdf, x0); update!(s, fdf.DF); s)
+init(s::DenseCholeskySolver, fdf::OnceDifferentiable{V, M, V}, x0::V;
+    initf::Bool=true, initdf::Bool=true) where {V, M} =
+        (_init!(fdf, x0, initf, initdf); update!(s, fdf.DF); s)
 
 update!(s::DenseCholeskySolver, J::AbstractMatrix) =
     (s.fac = _cholesky!(mul!(s.JtJ, J', J), s.d); return nothing)
