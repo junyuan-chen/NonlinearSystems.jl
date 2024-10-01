@@ -97,7 +97,6 @@ NonlinearSystems.jl addresses the following limitations that the related package
   - Iteration steps are not non-allocating
   - No support for nonlinear least squares
 - [NonlinearSolve.jl](https://github.com/SciML/NonlinearSolve.jl)
-  - Trust region solver (`TrustRegion`) does not provide correct answers on test problems (as of version 1.6)
   - No rank-1 update of the Jacobian matrix and factorization
   - Iteration steps are not non-allocating
   - No support for nonlinear least squares
@@ -110,14 +109,9 @@ NonlinearSystems.jl addresses the following limitations that the related package
 
 ## Roadmap
 
-The development of NonlinearSystems.jl is still in an early stage.
 At this moment, only trust-region methods are considered and
 the linear problem involved in each iteration is only solved by dense matrix factorization.
-
-The following features will be added in future:
-
-- Support for sparse Jacobian matrices
-- Support for conducting linear algebra on GPUs
+The package is intended to be lightweight.
 
 ## References
 
