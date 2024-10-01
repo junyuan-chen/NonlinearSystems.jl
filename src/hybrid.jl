@@ -53,6 +53,7 @@ struct HybridSolver{T, L, V} <: AbstractSolver{T}
     thres_jac::Int
     thres_nslow1::Int
     thres_nslow2::Int
+    warn::Bool
 end
 
 """
@@ -79,13 +80,15 @@ See also [`Hybrid`](@ref).
 - `thres_nslow2::Integer=5`: signal slow solver progress
   if there is no expansion of trust region after recomputing the Jacobian matrix
   in the specified number of consecutive steps.
+- `warn::Bool=true`: print a warning message for slow solver progress
 """
 function HybridSolver(fdf::OnceDifferentiable, x::AbstractVector, fx::AbstractVector,
         J::AbstractMatrix, P::Type{<:ProblemType};
         linsolver=default_linsolver(fdf, x0, P),
         factor_init::Real=1.0, factor_up::Real=2.0, factor_down::Real=0.5,
         scaling::Bool=true, rank1update::Bool=true,
-        thres_jac::Integer=2, thres_nslow1::Integer=10, thres_nslow2::Integer=5)
+        thres_jac::Integer=2, thres_nslow1::Integer=10, thres_nslow2::Integer=5,
+        warn::Bool=true)
     M, N = size(J) # Assume the sizes of x, fx and J are all compatible
     P === RootFinding && M != N && throw(DimensionMismatch(
         "the number of variables must match the number of equations in a root-finding problem"))
@@ -114,7 +117,7 @@ function HybridSolver(fdf::OnceDifferentiable, x::AbstractVector, fx::AbstractVe
     return HybridSolver(Ref(state), linsolver, diagn,
         newton, grad, df, Jdx, w, v, factor_init, factor_up, factor_down,
         scaling, rank1update, convert(Int, thres_jac),
-        convert(Int, thres_nslow1), convert(Int, thres_nslow2))
+        convert(Int, thres_nslow1), convert(Int, thres_nslow2), warn)
 end
 
 # ! This method reuses arrays from s
@@ -123,13 +126,15 @@ function init(s::NonlinearSystem{P,V,M,<:HybridSolver{T}}, x0::V;
         factor_down::Real=s.solver.factor_down, scaling::Bool=s.solver.scaling,
         rank1update::Bool=s.solver.rank1update, thres_jac::Integer=s.solver.thres_jac,
         thres_nslow1::Integer=s.solver.thres_nslow1,
-        thres_nslow2::Integer=s.solver.thres_nslow2, kwargs...) where {P,V,M,T}
-    copyto!(s.x, x0)
+        thres_nslow2::Integer=s.solver.thres_nslow2,
+        warn::Bool=s.solver.warn,
+        initf::Bool=true, initdf::Bool=true, kwargs...) where {P,V,M,T}
+    s.x === x0 || copyto!(s.x, x0)
     nan = convert(eltype(s.x), NaN)
     fill!(s.dx, nan)
     ss, fdf = s.solver, s.fdf
     linsolver = getlinsolver(s)
-    init(linsolver, fdf, s.x)
+    init(linsolver, fdf, s.x; initf=initf, initdf=initdf)
     fill!(ss.grad, nan)
     copyto!(s.fx, fdf.F)
     diagn = ss.diagn
@@ -146,8 +151,10 @@ function init(s::NonlinearSystem{P,V,M,<:HybridSolver{T}}, x0::V;
     solver = HybridSolver(Ref(state), linsolver, diagn,
         ss.newton, ss.grad, ss.df, ss.Jdx, ss.w, ss.v, factor_init, factor_up, factor_down,
         scaling, rank1update, convert(Int, thres_jac),
-        convert(Int, thres_nslow1), convert(Int, thres_nslow2))
-    return NonlinearSystem(P, s.fdf, s.x, s.fx, s.dx, solver; kwargs...)
+        convert(Int, thres_nslow1), convert(Int, thres_nslow2), warn)
+    return NonlinearSystem(P, s.fdf, s.x, s.fx, s.dx, solver;
+        lower=s.lb, upper=s.ub, maxiter=s.maxiter, ftol=s.ftol, gtol=s.gtol,
+        xtol=s.xtol, xtolr=s.xtolr, showtrace=s.showtrace, kwargs...)
 end
 
 function dogleg!(dx, linsolver, J, fx, diagn, δ, newton, grad, w)
@@ -291,10 +298,10 @@ function (s::HybridSolver{T})(fdf::OnceDifferentiable, x::AbstractVector,
 
     if nslow1 === s.thres_nslow1
         if nslow2 >= s.thres_nslow2
-            @warn "iteration $(iter) is not making progress even with reevaluations of Jacobians; try a smaller value with option thres_jac"
+            s.warn && @warn "iteration $(iter) is not making progress even with reevaluations of Jacobians; try a smaller value with option thres_jac"
             return iter, jac_noprogress
         else
-            @warn "iteration $(iter) is not making progress"
+            s.warn && @warn "iteration $(iter) is not making progress"
             return iter, eval_noprogress
         end
     else
@@ -306,7 +313,7 @@ function init(::Type{Hybrid{P}}, fdf::OnceDifferentiable, x0::AbstractVector;
         linsolver=default_linsolver(fdf, x0, P),
         factor_init::Real=1.0, factor_up::Real=2.0, factor_down::Real=0.5,
         scaling=true, rank1update=true,
-        thres_jac=2, thres_nslow1=10, thres_nslow2=5, kwargs...) where P
+        thres_jac=2, thres_nslow1=10, thres_nslow2=5, warn=true, kwargs...) where P
     x = copy(x0)
     fx = copy(fdf.F)
     dx = similar(x) # Preserve the array type
@@ -314,7 +321,7 @@ function init(::Type{Hybrid{P}}, fdf::OnceDifferentiable, x0::AbstractVector;
     solver = HybridSolver(fdf, x, fx, fdf.DF, P; linsolver=linsolver,
         factor_init=factor_init, factor_up=factor_up, factor_down=factor_down,
         scaling=scaling, rank1update=rank1update,
-        thres_jac=thres_jac, thres_nslow1=thres_nslow1, thres_nslow2=thres_nslow2)
+        thres_jac=thres_jac, thres_nslow1=thres_nslow1, thres_nslow2=thres_nslow2, warn=warn)
     # Remaining kwargs are handled by NonlinearSystem constructor
     return NonlinearSystem(P, fdf, x, fx, dx, solver; kwargs...)
 end

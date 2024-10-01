@@ -168,11 +168,13 @@ solve!(s::NonlinearSystem, x0; kwargs...) = solve!(init(s, x0; kwargs...))
 init(algo::AbstractAlgorithm, args...; kwargs...) =
     init(typeof(algo), args...; kwargs...)
 
-init(Algo::Type{<:AbstractAlgorithm}, f, x0::AbstractVector; kwargs...) =
-    init(Algo, OnceDifferentiable(f, similar(x0), similar(x0)), x0; kwargs...)
+init(Algo::Type{<:AbstractAlgorithm}, f, x0::AbstractVector, nf::Int=length(x0);
+    kwargs...) =
+        init(Algo, OnceDifferentiable(f, similar(x0), similar(x0, nf)), x0; kwargs...)
 
-init(Algo::Type{<:AbstractAlgorithm}, f, j, x0::AbstractVector; kwargs...) =
-    init(Algo, OnceDifferentiable(f, j, similar(x0), similar(x0)), x0; kwargs...)
+init(Algo::Type{<:AbstractAlgorithm}, f, j, x0::AbstractVector, nf::Int=length(x0);
+    kwargs...) =
+        init(Algo, OnceDifferentiable(f, j, similar(x0), similar(x0, nf)), x0; kwargs...)
 
 function show(io::IO, s::NonlinearSystem{P}) where P
     print(io, nequ(s), '×', nvar(s), ' ', typeof(s).name.name, '{', P, "}(")

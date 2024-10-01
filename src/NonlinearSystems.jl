@@ -5,7 +5,7 @@ using CommonSolve: solve
 using FastLapackInterface: LUWs
 using LinearAlgebra: BLAS, LAPACK, LU, Cholesky, cholesky!, Hermitian, ldiv!, mul!,
     lowrankupdate!
-using NLSolversBase: OnceDifferentiable, value_jacobian!!, jacobian!!
+using NLSolversBase: OnceDifferentiable, value_jacobian!!, value!!, jacobian!!
 using PositiveFactorizations
 using Printf
 

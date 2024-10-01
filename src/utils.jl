@@ -25,10 +25,16 @@ end
     return sqrt(e2)
 end
 
-function _init!(fdf::OnceDifferentiable, x0)
+function _init!(fdf::OnceDifferentiable, x0, initf::Bool, initdf::Bool)
     fdf.f_calls[1] = 0
     fdf.df_calls[1] = 0
-    value_jacobian!!(fdf, x0)
+    if initf && initdf
+        value_jacobian!!(fdf, x0)
+    elseif initf
+        value!!(fdf, x0)
+    elseif initdf
+        jacobian!!(fdf, x0)
+    end
     return fdf
 end
 
