@@ -3,4 +3,4 @@ Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
 NonlinearSystems = "deb0877a-d74a-4aeb-b6ac-c17f6fb4122e"
 
 [compat]
-Documenter = "0.27"
+Documenter = "1"
