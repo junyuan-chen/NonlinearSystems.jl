@@ -40,8 +40,8 @@ mutable struct DenseLUSolver{F}
 end
 
 default_linsolver(fdf::OnceDifferentiable{V, M, V}, x0::V,
-    ::Type{RootFinding}) where {V<:AbstractVector, M<:AbstractMatrix} =
-        init(DenseLUSolver, fdf, x0)
+    ::Type{RootFinding}; kwargs...) where {V<:AbstractVector, M<:AbstractMatrix} =
+        init(DenseLUSolver, fdf, x0; kwargs...)
 
 init(::Type{DenseLUSolver}, fdf::OnceDifferentiable, x0::AbstractVector;
     initf::Bool=true, initdf::Bool=true) =
@@ -143,19 +143,19 @@ mutable struct DenseCholeskySolver{TF, TI, M, V, V1<:Union{V,Nothing}}
 end
 
 default_linsolver(fdf::OnceDifferentiable{V, M, V}, x0::V,
-    ::Type{LeastSquares}) where {V<:AbstractVector, M<:AbstractMatrix} =
-        init(DenseCholeskySolver, fdf, x0)
+    ::Type{LeastSquares}; kwargs...) where {V<:AbstractVector, M<:AbstractMatrix} =
+        init(DenseCholeskySolver, fdf, x0; kwargs...)
 
 init(::Type{DenseCholeskySolver}, fdf::OnceDifferentiable, x0::AbstractVector;
     initf::Bool=true, initdf::Bool=true, kwargs...) =
         (_init!(fdf, x0, initf, initdf); init(DenseCholeskySolver, fdf.DF, fdf.F; kwargs...))
 
 function init(::Type{DenseCholeskySolver}, J::AbstractMatrix, f::AbstractVector;
-        rank1chol::Bool=length(f)>3)
+        rank1update::Val{R}=Val(true)) where R
     JtJ = J'J
     Jtf = J'f
-    d = Vector{PFac.signtype(eltype(J))}(undef, size(J, 1))
-    if rank1chol
+    d = Vector{PFac.signtype(eltype(J))}(undef, size(J, 2))
+    if R == true
         v1, v2 = similar(Jtf), similar(Jtf)
         return DenseCholeskySolver(JtJ, Jtf, v1, v2, d, _cholesky!(JtJ, d))
     else

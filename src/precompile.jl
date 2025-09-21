@@ -22,7 +22,7 @@ using PrecompileTools: @setup_workload, @compile_workload
         solve(Hybrid, p1_f!, x0_1)
         solve(Hybrid, p15_f!, x0_15, thres_jac=0)
         solve(Hybrid{LeastSquares}, fdf, x0_1;
-            linsolver=init(DenseCholeskySolver, fdf, x0_1; rank1chol=false))
+            linsolver=init(DenseCholeskySolver, fdf, x0_1; rank1update=Val(true)))
         solve(Hybrid{LeastSquares}, p15_f!, x0_15, thres_jac=0)
     end
 end
