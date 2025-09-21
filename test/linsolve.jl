@@ -53,7 +53,7 @@ end
 @testset "DenseCholeskySolver" begin
     x0 = zeros(2)
     fdf = OnceDifferentiable(f!, j!, x0, similar(x0))
-    s = default_linsolver(fdf, x0, LeastSquares)
+    s = default_linsolver(fdf, x0, LeastSquares; rank1update=Val(false))
     @test typeof(s).parameters[5] === Nothing
     Y = zeros(2)
     J = fdf.DF

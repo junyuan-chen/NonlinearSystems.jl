@@ -56,8 +56,8 @@
     p2 = solve(Hybrid{LeastSquares}(), f!, j!, x0)
     @test Symbol(getexitstate(p2)) === :ftol_reached
     @test sprint(show, p2)[1:46] == "2×2 NonlinearSystem{LeastSquares}(Hybrid, 9.8"
-    @test sprint(show, MIME("text/plain"), p2)[1:329] == """
-        2×2 NonlinearSystem{LeastSquares, Vector{Float64}, Matrix{Float64}, HybridSolver{Float64, DenseCholeskySolver{Float64, Int8, Matrix{Float64}, Vector{Float64}, Nothing}, Vector{Float64}}, Nothing, Nothing}:
+    @test sprint(show, MIME("text/plain"), p2)[1:337] == """
+        2×2 NonlinearSystem{LeastSquares, Vector{Float64}, Matrix{Float64}, HybridSolver{Float64, DenseCholeskySolver{Float64, Int8, Matrix{Float64}, Vector{Float64}, Vector{Float64}}, Vector{Float64}}, Nothing, Nothing}:
           Problem type:                 Least squares
           Algorithm:                    Hybrid
           Candidate (x):                [1.04"""
